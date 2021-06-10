@@ -66,25 +66,31 @@ router.get('/userAds', (req, res) => {
 });
 
 router.post('/removeAd', (req, res) => {
-  console.info('1');
   const { adID } = req.body;
-  model.removeAd(adID);
-  console.info('2');
-  db.run('DELETE FROM AdDatabase WHERE adID=?', [adID], (err) => {
-    if (err) {
-      console.error(err);
-      res.status(404).json({
-        msg: 'Could not remove the ad',
+  const { userID } = req.session;
+  const ad = model.getAd(adID);
+  const user = model.getUser(userID);
+  if (ad.adUsername === user.username || user.isAdmin) {
+    model.removeAd(adID);
+    db.run('DELETE FROM AdDatabase WHERE adID=?', [adID], (err) => {
+      if (err) {
+        console.error(err);
+        res.status(404).json({
+          msg: 'Could not remove the ad',
+        });
+        return;
+      }
+      res.status(200).json({
+        status: 200,
+        msg: 'Successfully removed an ad',
       });
-      return;
-    }
-    console.info('3');
-    res.status(200).json({
-      status: 200,
-      msg: 'Successfully removed an ad',
+      model.io.sockets.emit('removeAd', { id: adID });
     });
-    model.io.sockets.emit('removeAd', { id: adID });
-  });
+  } else {
+    res.status(404).json({
+      msg: "Deletion failed, attempted to remove another users ad"
+    })
+  }
 });
 
 
@@ -101,6 +107,7 @@ router.get('/logout', (req, res) => {
     });
     return;
   }
+  req.session.destroy();
   model.logoutUser(userID);
   res.status(200).json({
     msg: 'Successful logout',
